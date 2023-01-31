@@ -12,7 +12,7 @@ from datetime import datetime
 #destination_folder="C:/Users/baatz/DWD210/downloads"
 #destination_folder = "/run/user/1000/gvfs/sftp:host=login01.cluster.zalf.de,user=rpm/beegfs/common/data/climate/dwd_spreewasserN/forecast_daily/raw2/"
 destination_folder="/beegfs/common/data/climate/dwd_spreewasserN/forecast_daily/raw/"
-weather_variables=["alb_rad","t_2m","tmax_2m","tmin_2m","qv_s","relhum_2m","V_10M","U_10M","pmsl","w_snow"]
+weather_variables=["alb_rad","t_2m","tmax_2m","tmin_2m","qv_s","relhum_2m","v_10m","u_10m","pmsl","w_snow"]
 
 #dwd_path="https://opendata.dwd.de/weather/nwp/icon/grib/"
 file_ending=".grib2.bz2"
