@@ -252,6 +252,8 @@ def run_producer(server={"server": None, "port": None}, shared_id=None):
         if setup["end_date"]:
             sim_json["climate.csv-options"]["end-date"] = str(setup["end_date"])
             # sim_json["include-file-base-path"] = paths["include-file-base-path"]
+        no_days = (date.fromisoformat(sim_json["climate.csv-options"]["end-date"]) - date.fromisoformat(
+            sim_json["climate.csv-options"]["start-date"])).days
 
         sim_json["output"]["obj-outputs?"] = False
 
@@ -325,6 +327,9 @@ def run_producer(server={"server": None, "port": None}, shared_id=None):
                         "crow": int(crow), "ccol": int(ccol),
                         "soil_id": soil_id,
                         "env_id": sent_env_count,
+                        "no_rows": srows,
+                        "no_cols": scols,
+                        "no_days": no_days,
                         "nodata": True
                     }
                     if not DEBUG_DONOT_SEND:
@@ -491,6 +496,9 @@ def run_producer(server={"server": None, "port": None}, shared_id=None):
                         "crow": int(crow), "ccol": int(ccol),
                         "soil_id": soil_id,
                         "env_id": sent_env_count,
+                        "no_rows": srows,
+                        "no_cols": scols,
+                        "no_days": no_days,
                         "nodata": True
                     }
                     if not DEBUG_DONOT_SEND:
@@ -647,7 +655,10 @@ def run_producer(server={"server": None, "port": None}, shared_id=None):
                     "crow": int(crow), "ccol": int(ccol),
                     "soil_id": soil_id,
                     "env_id": sent_env_count,
-                    "nodata": False
+                    "nodata": False,
+                    "no_rows": srows,
+                    "no_cols": scols,
+                    "no_days": no_days
                 }
 
                 if not DEBUG_DONOT_SEND:

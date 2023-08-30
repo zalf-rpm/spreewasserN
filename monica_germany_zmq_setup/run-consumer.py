@@ -65,7 +65,7 @@ def run_consumer(leave_after_finished_run=True, server={"server": None, "port": 
         "port": server["port"] if server["port"] else DEFAULT_PORT,
         "server": server["server"] if server["server"] else DEFAULT_HOST,
         "no-of-setups": 1,
-        "scratch": "scratch/",  # "/scratch/rpm/",
+        "write_directly": False,
         "timeout": 600000  # 10 minutes
     }
 
@@ -73,7 +73,7 @@ def run_consumer(leave_after_finished_run=True, server={"server": None, "port": 
         for arg in sys.argv[1:]:
             k, v = arg.split("=")
             if k in config:
-                config[k] = v
+                config[k] = v.lower() == "true" if v.lower() in ["true", "false"] else v
 
     paths = PATHS[config["mode"]]
 
@@ -95,14 +95,11 @@ def run_consumer(leave_after_finished_run=True, server={"server": None, "port": 
     setup_id_to_nc_vars = {}
     setup_id_to_np_arrays = {}
 
-    def init_netcdfs():
-        path = config["scratch"]
+    def init_netcdfs(no_days, no_rows, no_cols, write_directly=False):
+        path = config["out"]
         if not os.path.exists(path):
             os.makedirs(path)
         nc_file_path = path + "test.nc"
-        no_rows = 875
-        no_cols = 643
-        no_days = 365
         if os.path.exists(nc_file_path):
             rootgrp = Dataset(nc_file_path, "a", format="NETCDF4")
             sm1 = rootgrp.variables["sm_sum_0-30"]
@@ -127,9 +124,9 @@ def run_consumer(leave_after_finished_run=True, server={"server": None, "port": 
             nfc.units = "%"
             nfc.missing_value = -9999
 
-        sm1a = np.full((no_days, no_rows, no_cols), -9999, dtype="f8")
-        sm2a = np.full((no_days, no_rows, no_cols), -9999, dtype="f8")
-        nfca = np.full((no_days, no_rows, no_cols), -9999, dtype="f8")
+        sm1a = None if write_directly else np.full((no_days, no_rows, no_cols), -9999, dtype="f8")
+        sm2a = None if write_directly else np.full((no_days, no_rows, no_cols), -9999, dtype="f8")
+        nfca = None if write_directly else np.full((no_days, no_rows, no_cols), -9999, dtype="f8")
 
         return {"nc": rootgrp, "nc_vars": [sm1, sm2, nfc], "np_arrays": [sm1a, sm2a, nfca]}
 
@@ -148,15 +145,17 @@ def run_consumer(leave_after_finished_run=True, server={"server": None, "port": 
             custom_id = msg["customId"]
             setup_id = custom_id["setup_id"]
 
+            row = custom_id["srow"]
+            col = custom_id["scol"]
+
             if setup_id not in setup_id_to_nc:
-                init = init_netcdfs()
+                init = init_netcdfs(custom_id["no_days"], custom_id["no_rows"], custom_id["no_cols"],
+                                    config["write_directly"])
                 setup_id_to_nc[setup_id] = init["nc"]
                 setup_id_to_nc_vars[setup_id] = init["nc_vars"]
                 setup_id_to_np_arrays[setup_id] = init["np_arrays"]
             np_arrays = setup_id_to_np_arrays[setup_id]
 
-            row = custom_id["srow"]
-            col = custom_id["scol"]
 
             debug_msg = f'received work result {process_message.received_env_count} customId: {msg.get("customId", "")}'
             print(debug_msg)
