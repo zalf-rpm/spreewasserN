@@ -16,6 +16,7 @@
 # Copyright (C: Leibniz Centre for Agricultural Landscape Research (ZALF)
 
 from collections import defaultdict
+import copy
 from datetime import date, timedelta
 import json
 import numpy as np
@@ -79,14 +80,9 @@ DATA_GRID_SOIL = "germany/buek200_1000_25832_etrs89-utm32n.asc"
 DATA_GRID_SOIL_OW = "germany/buek200_1000_25832_etrs89-utm32n_OW.asc"
 DATA_GRID_CROPS = "germany/CM_2017-2019_WW_1000m_25832_q3.asc"  # winter wheat
 # DATA_GRID_CROPS = "germany/CM_2017-2019_SM_1000m_25832_q3.asc"  # silage maize
-# TEMPLATE_PATH_LATLON = "{path_to_climate_dir}/latlon_to_rowcol.json"
-# TEMPLATE_PATH_LATLON = "{path_to_climate_dir}/latlon_to_rowcol_gcfs21.json"
 TEMPLATE_PATH_LATLON = "{path_to_climate_dir}/latlon_to_rowcol_gcfs22.json"
-# TEMPLATE_PATH_LATLON = "data/latlon_to_rowcol.json"
-# TEMPLATE_PATH_LATLON = "data/latlon_to_rowcol_gcfs21.json"
 # TEMPLATE_PATH_LATLON = "data/latlon_to_rowcol_gcfs22.json"
 TEMPLATE_PATH_CLIMATE_CSV = "{gcm}/{rcm}/{scenario}/{ensmem}/{version}/row-{crow}/col-{ccol}.csv.gz"
-# TEMPLATE_PATH_CLIMATE_CSV = "{gcm}/{rcm}/{scenario}/{ensmem}/{version}/{crow}/daily_mean_RES1_C{ccol}R{crow}.csv.gz"
 
 # Additional data for masking the regions
 NUTS3_REGIONS = "data/germany/NUTS_RG_03M_25832.shp"
@@ -115,14 +111,14 @@ def run_producer(server={"server": None, "port": None}, shared_id=None):
         "mode": "re-local-remote",
         "server-port": server["port"] if server["port"] else "6667",
         "server": server["server"] if server["server"] else "login01.cluster.zalf.de",
-        "start-row": "1",
+        "start-row": "0",
         "end-row": "-1",
         "path_to_dem_grid": "",
         "sim.json": "sim_spreewasser.json",
         "crop.json": "crop_spreewasser_LDS.json",
         "site.json": "site.json",
         "setups-file": "sim_setups_spreewasser.csv",
-        "run-setups": "[100]",
+        "run-setups": "[1]",
         "shared_id": shared_id
     }
 
@@ -337,6 +333,16 @@ def run_producer(server={"server": None, "port": None}, shared_id=None):
         # cs__ = open("coord_mapping_etrs89-utm32n_to_wgs84-latlon.csv", "w")
         # cs__.write("row,col,center_25832_etrs89-utm32n_r,center_25832_etrs89-utm32n_h,center_lat,center_lon\n")
 
+        # for sensitivity analysis mode
+        is_sensitivity_analysis = False
+        orig_params = None
+        if setup["species_param_name"]:
+            if not orig_params:
+                orig_params = copy.deepcopy(env_template["cropRotation"][0]["worksteps"][0]["crop"]["cropParams"]["species"])
+        elif setup["cultivar_param_name"]:
+            if not orig_params:
+                orig_params = copy.deepcopy(env_template["cropRotation"][0]["worksteps"][0]["crop"]["cropParams"]["cultivar"])
+
         for srow in range(0, srows):
             print(srow, end=", ")
 
@@ -356,6 +362,37 @@ def run_producer(server={"server": None, "port": None}, shared_id=None):
                 # inter = crow/ccol encoded into integer
                 crow, ccol = climate_data_interpolator(sr, sh)
 
+                # OW: clim4cast sensitivity analysis
+                p_value = p_name = params = None
+                if setup["species_param_name"]:
+                    params = env_template["cropRotation"][0]["worksteps"][0]["crop"]["cropParams"]["species"]
+                    p_name = setup["species_param_name"]
+                elif setup["cultivar_param_name"]:
+                    params = env_template["cropRotation"][0]["worksteps"][0]["crop"]["cropParams"]["cultivar"]
+                    p_name = setup["cultivar_param_name"]
+                if setup["coeff"] and p_name and params and orig_params:
+                    # Case 3: List with a coefficient
+                    coefficient = float(setup["coeff"])
+                    is_sensitivity_analysis = True
+                    if type(orig_params[p_name]) is list and len(orig_params[p_name]) > 0:
+                        if type(orig_params[p_name][0]) is list:
+                            params[p_name][0] = list([float(val) * coefficient for val in orig_params[p_name][0]])
+                        else:
+                            params[p_name] = list([float(val) * coefficient for val in orig_params[p_name]])
+                elif setup["param_value"]:
+                    # Case 1: Single value or Case 2: List without coefficient
+                    p_value = float(setup["param_value"])
+                    is_sensitivity_analysis = True
+                    if params and p_name:
+                        if setup["param_index_in_array"]:
+                            i = int(setup["param_index_in_array"])
+                            if type(params[p_name][0]) is list:
+                                params[p_name][0][i] = p_value
+                            else:
+                                params[p_name][i] = p_value
+                        else:
+                            params[p_name] = p_value
+
                 crop_grid_id = int(crop_grid[srow, scol])
                 # print(crop_grid_id)
                 if crop_grid_id != 1 or soil_id == -8888:
@@ -367,8 +404,9 @@ def run_producer(server={"server": None, "port": None}, shared_id=None):
                         "soil_id": soil_id,
                         "env_id": sent_env_count,
                         "nodata": True,
+                        "is_sensitivity_analysis": is_sensitivity_analysis,
                     }
-                    if not DEBUG_DONOT_SEND:
+                    if not is_sensitivity_analysis and not DEBUG_DONOT_SEND:
                         socket.send_json(env_template)
                         # print("sent nodata env ", sent_env_count, " customId: ", env_template["customId"])
                         sent_env_count += 1
@@ -533,8 +571,9 @@ def run_producer(server={"server": None, "port": None}, shared_id=None):
                         "soil_id": soil_id,
                         "env_id": sent_env_count,
                         "nodata": True,
+                        "is_sensitivity_analysis": is_sensitivity_analysis
                     }
-                    if not DEBUG_DONOT_SEND:
+                    if not is_sensitivity_analysis and not DEBUG_DONOT_SEND:
                         socket.send_json(env_template)
                         # print("sent nodata env ", sent_env_count, " customId: ", env_template["customId"])
                         sent_env_count += 1
@@ -616,7 +655,6 @@ def run_producer(server={"server": None, "port": None}, shared_id=None):
 
                 env_template["params"]["simulationParameters"]["UseNMinMineralFertilisingMethod"] = setup[
                     "fertilization"]
-                env_template["params"]["simulationParameters"]["UseAutomaticIrrigation"] = setup["irrigation"]
                 env_template["params"]["simulationParameters"]["NitrogenResponseOn"] = setup["NitrogenResponseOn"]
                 env_template["params"]["simulationParameters"]["WaterDeficitResponseOn"] = setup[
                     "WaterDeficitResponseOn"]
@@ -672,6 +710,9 @@ def run_producer(server={"server": None, "port": None}, shared_id=None):
                     "crow": int(crow), "ccol": int(ccol),
                     "soil_id": soil_id,
                     "env_id": sent_env_count,
+                    "is_sensitivity_analysis": is_sensitivity_analysis,
+                    "param_name": p_name,
+                    "param_value": p_value,
                     "nodata": False
                 }
 
@@ -706,6 +747,15 @@ def run_producer(server={"server": None, "port": None}, shared_id=None):
                     else:
                         print("WARNING: Row ", (sent_env_count - 1), " already exists")
             # print("unknown_soil_ids:", unknown_soil_ids)
+
+        if env_template and is_sensitivity_analysis:
+            env_template["pathToClimateCSV"] = ""
+            env_template["customId"] = {
+                "setup_id": setup_id,
+                "no_of_sent_envs": sent_env_count,
+                "is_sensitivity_analysis": is_sensitivity_analysis,
+            }
+            socket.send_json(env_template)
 
             # print("crows/cols:", crows_cols)
         # cs__.close()
