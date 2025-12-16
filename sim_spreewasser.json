@@ -39,19 +39,24 @@
 
 		
 		"events": [
-			"crop", [
+			"_crop", [
 				["CM-count", "FIRST"],
 				["Year", "LAST"],
 				["Crop", "FIRST"],
-				["Yield", "LAST"],
-                ["Precip", "SUM"]
+				["Yield", "LAST"]
 			],
 			"_daily", [
 				"Date",
 				"Crop",
 				"Stage",
 				"Yield"
-			]
+			],
+            {"from": "xxxx-03-01", "to": "xxxx-07-15"}, [
+                ["CM-count", "FIRST"],
+                ["Year", "LAST"],
+                ["Crop", "FIRST"],
+                ["Precip", "SUM"]
+            ]
 		]
 	},
 
